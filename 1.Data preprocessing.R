@@ -111,6 +111,25 @@ head(movies4)
 # Transform year to numeric
 movies4$year <- as.numeric(levels(movies4$year))[movies4$year]
 
+# Checking missing value
+missing <- movies4[is.na(movies4$year),]
+
+# correct: input year manually for 7 observations
+attach(movies4)
+movies4$year_new <- ifelse(movie_id_n==68555,1972 ,
+                    ifelse(movie_id_n==118661,1998,
+                    ifelse(movie_id_n==1150947,2008,
+                    ifelse(movie_id_n==2089750,2012,
+                    ifelse(movie_id_n==2194599,2013, 
+                    ifelse(movie_id_n==2205904,2013,
+                    ifelse(movie_id_n==6014428,2016,
+                                     year  )))))))
+test<- movies4[movie_id_n==2205904,]
+
+movies4 <- movies4[,-(7),drop=FALSE]
+names(movies4)
+colnames(movies4) <- c("movie_id_n","movie_title_year","genre","genre1","genre2","genre3","year")
+
 # Save the dataset
 save(movies4,file="movies4.Rda")
 write.table(movies4,file = "movies4.csv",sep = " ", quote = FALSE, append = FALSE, na = "NA")
