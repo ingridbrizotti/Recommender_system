@@ -9,6 +9,11 @@
 # - Define a matrix having 1 if the user rated the movie, and 0 otherwise. 
 # - Since we are not taking account of the ratings, the result will be less accurate.
 
+### Package used is recommenderlab 
+### More details on: https://cran.r-project.org/web/packages/recommenderlab/recommenderlab.pdf 
+
+library(recommenderlab)
+
 ##############################################################################
 # uses the data set (r2) from step 3.Data preparation
 
