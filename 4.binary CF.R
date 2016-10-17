@@ -10,7 +10,7 @@
 # - Since we are not taking account of the ratings, the result will be less accurate.
 
 ##############################################################################
-# uses the data set from step3
+# uses the data set (r2) from step 3.Data preparation
 
 # delete rating
 r_binary <- subset(r2, , -c(rating))
@@ -25,6 +25,14 @@ r_wide <- reshape(data = r_binary,
                   drop = NULL)
 
 head(r_wide[, 1:5, with = FALSE])
+# user_id value.816711 value.2726560 value.3079380 value.1091191
+# 1:       2            1             1             1             1
+# 2:      18           NA            NA            NA             1
+# 3:      26            1            NA            NA            NA
+# 4:      38           NA            NA            NA            NA
+# 5:      48           NA            NA            NA            NA
+# 6:      49           NA            NA             1            NA
+
 
 # keep only the columns containing ratings
 # the user name will be the matrix row names, so we need to store them in the vector_users vector
@@ -46,18 +54,30 @@ head(matrix_wide[, 1:6])
 
 # replace NA for zero
 matrix_wide[is.na(matrix_wide)] <- 0
+head(matrix_wide[, 1:6])
+# 816711 2726560 3079380 1091191 2381249 1398426
+# 2       1       1       1       1       1       1
+# 18      0       0       0       1       0       0
+# 26      1       0       0       0       0       0
+# 38      0       0       0       0       0       0
+# 48      0       0       0       0       0       0
+# 49      0       0       1       0       0       0
+
 
 # coercing matrix_wide into a binary rating matrix 
 ratings_matrix <- as(matrix_wide, "binaryRatingMatrix")
 ratings_matrix
 # 4938 x 1788 rating matrix of class ‘binaryRatingMatrix’ with 287862 ratings
 
+
 # visualize the matrix: As expected, the matrix is sparse
 image(ratings_matrix[1:100, 1:100], main = "Binary rating matrix")
+
 
 # number of users watching the same movie
 n_users <- colCounts(ratings_matrix)
 qplot(n_users) + stat_bin(binwidth = 5) + ggtitle("Distribution of the number of users")
+
 
 # without outliers
 qplot(n_users[n_users < 500]) + stat_bin(binwidth = 5) +
@@ -78,32 +98,34 @@ recc_data_test <- ratings_matrix[!which_train, ]
 ########################  BUILD THE MODEL - ITEM-BASED    ##################################
 
 # IBCF: item-based collaborative filtering
-recc_model_ib <- Recommender(data = recc_data_train,
+# Using Jaccard index (binary attribute)
+recc_model <- Recommender(data = recc_data_train,
                           method = "IBCF",
                           parameter = list(method = "Jaccard"))
 
 # extract some details about the model
-model_details_ib <- getModel(recc_model_ib)
-model_details_ib$description
+model_details <- getModel(recc_model)
+model_details$description
 # [1] "IBCF: Reduced similarity matrix"
 
-class(model_details_ib$sim)
-dim(model_details_ib$sim)
+
+class(model_details$sim)
+dim(model_details$sim)
 # The matrix belongs to the dgCMatrix class, and it is square
 
 # build the heat map
 n_items_top <- 20
-image(model_details_ib$sim[1:n_items_top, 1:n_items_top],
+image(model_details$sim[1:n_items_top, 1:n_items_top],
       main = "Heatmap of the first rows and columns")
 
 # Check more details
-model_details_ib$k
-row_sums <- rowSums(model_details_ib$sim > 0)
+model_details$k
+row_sums <- rowSums(model_details$sim > 0)
 table(row_sums)
 # as expected, each row has 30 elements greater than 0.
 
 # distribution chart
-col_sums <- colSums(model_details_ib$sim > 0)
+col_sums <- colSums(model_details$sim > 0)
 qplot(col_sums) + stat_bin(binwidth = 1) + ggtitle("Distribution of
                                                    the column count")
 
@@ -116,8 +138,8 @@ which_max
 list_m <- c(1951266,2004420,103064,478970,105695,361748)
 movies4[movies4$movie_id_n %in% list_m,]
 
-# All the distances are between 0 and 0.73
-range(recc_model_ib@model$sim)
-
+# All the distances are between 0 and 0.70
+range(recc_model@model$sim)
+# [1] 0.000000 0.702381
 
 
