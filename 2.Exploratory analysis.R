@@ -34,9 +34,11 @@ write.xlsx(freq3, "freq_genre3.xlsx")
 # year's release distribution
 head(movies4)
 hist(movies4$year, main="Year's movies distribution", xlab="year")
-boxplot(movies4$year, main="Boxplot of year")
+# boxplot(movies4$year, main="Boxplot of year")
 
 summary(movies4$year)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+# 1894    1989    2007    1997    2012    2016 
 
 detach(movies4)
 
@@ -61,6 +63,13 @@ t$new <- ifelse(t$count==1, "1",
 freq <- cbind(Freq = table(t$new), 
               Cumul = cumsum(table(t$new)), 
               relative = round((prop.table(table(t$new))*100),2))
+freq
+# Freq Cumul relative
+# 1 19932 19932    44.63
+# 2  5505 25437    12.33
+# 3  2940 28377     6.58
+# 4  1918 30295     4.29
+# 5 14366 44661    32.17
 
 library(xlsx)
 write.xlsx(freq, "freq_movies_per_user.xlsx")
@@ -122,10 +131,16 @@ boxplot(year ~ rating, data=f3)
 
 
 # Calculate correlation
+attach(f)
 cor(year,rating,method=c("pearson"))
+# [1] -0.1140753
 
 # One-way ANOVA test
 aov1 = aov(rating ~ genre1, data=f2)
 summary(aov1)
-
+# Df  Sum Sq Mean Sq F value Pr(>F)    
+# genre1           7   55251    7893    2326 <2e-16 ***
+#   Residuals   475125 1612350       3                   
+# ---
+#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 
