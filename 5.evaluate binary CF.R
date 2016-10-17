@@ -136,8 +136,20 @@ head(getConfusionMatrix(results)[[1]])
 # 50 10.040486 39.959514 36.23583 1686.764 0.2008097 0.28495002 0.28495002 0.023028613
 # 60 11.395749 48.604251 34.88057 1678.119 0.1899291 0.31855632 0.31855632 0.028017429
 
+# • True Positives (TP): These are recommended movies that have been watched
+# • False Positives (FP): These are recommended movies that haven't been watched
+# • False Negatives(FN): These are not recommended movies that have been watched
+# • True Negatives (TN): These are not recommended movies that haven't been watched
+
 # ROC curve
 plot(results, annotate = TRUE, main = "ROC curve")
+
+# • True Positive Rate (TPR): This is the percentage of watched movies that have been recommended. 
+# It's the number of TP divided by the number of watched movies (TP + FN).
+
+# • False Positive Rate (FPR): This is the percentage of NOT wacthed movies that have been recommended.
+# It's the number of FP divided by the number of NOT watched movies (FP + TN).
+
 
 # Precision and recall
 plot(results, "prec/rec", annotate = TRUE, main = "Precision-recall")
