@@ -3,14 +3,18 @@
 models_to_evaluate <- list(
   IBCF_cos = list(name = "IBCF", param = list(method = "cosine")),
   IBCF_cor = list(name = "IBCF", param = list(method = "pearson")),
+  IBCF_jac = list(name = "IBCF", param = list(method = "jaccard")),
+  IBCF_euc = list(name = "IBCF", param = list(method = "euclidean")),
   UBCF_cos = list(name = "UBCF", param = list(method = "cosine")),
   UBCF_cor = list(name = "UBCF", param = list(method = "pearson")),
+  UBCF_jac = list(name = "UBCF", param = list(method = "jaccard")),
+  UBCF_euc = list(name = "UBCF", param = list(method = "euclidean")),
   random = list(name = "RANDOM", param=NULL)
 )
 
-# recommend up to 100 movies to each user.
+# recommend up to 30 movies to each user.
 
-n_recommendations <- c(1, 5, seq(10, 100, 10))
+n_recommendations <- c(1, 5, seq(10, 30, 5))
 
 # We are ready to run and evaluate the models. Like in the previous chapter, the
 # function is evaluate. The only difference is that now the input method is a list of models:
@@ -86,4 +90,23 @@ title("ROC curve")
 
 
 
+### Combinations tested:
+#  1 movie/user - 50 ratings/movie
+#  5 movies/user - 50 ratings/movie
+# 10 movies/user - 50 ratings/movie
+# 20 movies/user - 50 ratings/movie
+# 50 movies/user - 50 ratings/movie
+# 100 movies/user - 50 ratings/movie
+
+# The best combination found: 10/movies/user
+
+### Combinations tested:
+# 10 movies/user - 20 ratings/movie
+# 10 movies/user - 90 ratings/movie
+# 10 movies/user - 120 ratings/movie
+# 10 movies/user - 150 ratings/movie
+# 10 movies/user - 200 ratings/movie
+# 10 movies/user - 250 ratings/movie
+# 10 movies/user - 300 ratings/movie
+# 10 movies/user - 500 ratings/movie
 
