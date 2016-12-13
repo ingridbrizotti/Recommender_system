@@ -1,0 +1,509 @@
+---
+title: "Recommender system for movies in R"
+output: pdf_document
+author: Ingrid Brizotti
+---
+
+The primary goal of this project is to build different recommender systems for movies of users that rated movies by Twitter account. 
+Also, the idea is to compare the recommender systems using:
+
+*	a binary rating (watched or not) and the rating gave by the user (from 0 to 10)
+
+*	using similarity between users (user-based) and items (item-based)
+
+*	different approaches to calculating the similarity: Euclidean distance, cosine distance, Pearson correlation and Jaccard index.
+
+\hspace*{1cm}
+
+**Dataset:** MovieTweetings (https://github.com/sidooms/MovieTweetings)
+
+**Approach:** item-based and user-based Collaborative Filtering
+
+**Techniques used to measure similarity:** Euclidean distance, cosine distance, Jaccard index and Pearson correlation
+
+**Package:** recommenderlab calculates the similarity and predicts the rating using regression (more info: https://cran.r-project.org/web/packages/recommenderlab/recommenderlab.pdf) 
+
+\hspace*{2cm}
+**Steps:**
+
+**1)** Prepare the data (check duplicity, missing, clean data, apply transformations, exploratory analysis)
+
+**2)** Divide 70% to train and 30% test
+
+**3)** Build the recommender system using binary variable
+
+**4)** Compare different approaches for binary systems measuring the accuracy using confusion matrix and ROC curve for BINARY systems
+
+**5)** Build the recommender system using rating
+
+**6)** Compare different approaches for rating systems measuring accuracy using confusion matrix and ROC curve for RATING systems
+
+**7)** Conclusions:
+
+* What is better? Systems using binary or rating?
+
+* What is more accurate: item-based or user-based?
+
+*  Identify the best approach to calculate similarity
+
+\hspace*{2cm}
+
+**1) Prepare the data**
+
+In this phase, the datasets were load in R and checked for duplications and missing values. Also, it was performed some descriptive statistics like checking rating distribution, how many movies per user, and how many ratings per movie. 
+
+The data set was filtered and just movies with more than 500 ratings stayed (this parameter was checked and compared on literature, [1]) and for binary systems it was kept 10 movies/user and for rating 90 movies/user because they demonstrated a better performance (please, see the results section on the final report document).
+
+
+
+```{r}
+########### Load packages ##############
+library(data.table)
+library(ggplot2)
+library(recommenderlab)
+library(scales)
+
+########### Load data ##############
+#setwd("/Users/ingridbrizotti/Desktop/Ryerson/3.Data_Analytics_Capstone/MovieTweetings/latest")
+
+# MOVIES #
+#mov <- readLines("movies.dat")
+#head(mov)
+#mov <- gsub("::", "*", mov)
+#movies <- read.table(text=mov, sep="*", header=FALSE, stringsAsFactor=TRUE, na.strings = "EMPTY", 
+#                     fileEncoding="UTF-8",fill = TRUE, quote = "")
+#colnames(movies) <- c("movie_id","movie_title_year","genre")
+#head(movies)
+
+# RATINGS #
+#rat <- readLines("ratings.dat")
+#head(rat)
+#rat <- gsub("::", "*", rat)
+#ratings <- read.table(text=rat, sep="*", header=FALSE, stringsAsFactor=TRUE, na.strings = "EMPTY", 
+#                      fileEncoding="UTF-8",fill = TRUE, quote = "")
+#head(ratings)
+#colnames(ratings) <- c("user_id","movie_id","rating","rating_timestamp")
+#head(ratings)
+
+load("~/Desktop/Ryerson/3.Data_Analytics_Capstone/MovieTweetings/latest/ratings.Rda")
+load("~/Desktop/Ryerson/3.Data_Analytics_Capstone/MovieTweetings/latest/movies.Rda")
+
+########### Check duplicity and missing ##############
+
+# Movies #
+
+# Transform in matrix (it was a factor)
+movies<- as.data.frame.matrix(movies)
+head(movies)
+str(movies)
+
+# Tranform movie_id in numeric
+movies2 <- data.frame(movies, movie_id_n = as.numeric(movies$movie_id))
+summary(movies2$movie_id_n)
+
+# Check duplicity of variable movie_id
+dupli_m <- movies2[duplicated(movies2$movie_id_n),] 
+nrow(dupli_m)
+# remove duplicate observations 
+movies2 <- movies2[!duplicated(movies2$movie_id_n),]
+
+
+# Check for NAs in movie_id (movie_id is the primary key)
+missing <- movies2[is.na(movies2$movie_id_n),]
+nrow(missing)
+
+
+# Ratings #
+head(ratings)
+# Check NA on user_id 
+missing <- ratings[is.na(ratings$user_id),]
+nrow(missing)
+# Check NA on movie_id
+missing <- ratings[is.na(ratings$movie_id),]
+nrow(missing)
+
+dim(movies2)
+dim(ratings)
+
+########### Exploratory analysis ##############
+
+# Analize the distribution of ratings
+vector_ratings <- as.vector(ratings$rating)
+unique(vector_ratings)
+vector_ratings <- factor(vector_ratings)
+qplot(vector_ratings, ylim = c(0,150000), xlab="Ratings", ylab="Amount") + ggtitle("Distribution of ratings")
+
+
+# count the number of ratings per movie
+t_m <- aggregate(cbind(count = rating) ~ movie_id, 
+                 data = ratings, 
+                 FUN = function(x){NROW(x)})
+
+# merge this count on ratings data set
+r <- merge(x=ratings, y=t_m ,by="movie_id", all.x=TRUE)
+
+
+########### Filters ##############
+
+# select movies with more than 500 ratings (checked on literature)
+r <- r[r$count >= 500,]
+
+# count movies per user
+t_m_u <- aggregate(cbind(count_movie = movie_id) ~ user_id, 
+                   data = r, 
+                   FUN = function(x){NROW(x)})
+# merge
+r2 <- merge(x=r, y=t_m_u ,by="user_id", all.x=TRUE)
+
+
+# select users with more than 10 movies for BINARY systems
+r_binary <- r2[r2$count_movie >= 10,]
+
+# select users with more than 90 movies for RATING systems
+r_rating <- r2[r2$count_movie >= 90,]
+
+
+# delete columns that won't be used
+r_binary <- subset(r_binary, , -c(rating_timestamp,count,count_movie,rating))
+r_rating <- subset(r_rating, , -c(rating_timestamp,count,count_movie))
+
+# convert it into a data table
+r_binary <- data.table(r_binary)
+r_rating <- data.table(r_rating)
+
+
+######### Prepare the data for binary systems (watched 1, didn't watch 0) ########
+
+# reshape (movies will be columns)
+r_binary[, value := 1]
+r_binary_wide <- reshape(data = r_binary,
+                         direction = "wide",
+                         idvar = "user_id",
+                         timevar = "movie_id",
+                         v.names = "value",
+                         drop = NULL)
+
+# keep only the columns containing ratings
+# the user name will be the matrix row names, so we need to store them in the vector_users vector
+vector_users <- r_binary_wide[, user_id]
+r_binary_wide <- r_binary_wide[ ,user_id := NULL]
+
+# have the column names equal to the item names
+setnames(x = r_binary_wide,
+         old = names(r_binary_wide),
+         new = substring(names(r_binary_wide), 7))
+
+# store the rating matrix within a recommenderlab object: 
+# 1) convert r_wide in a matrix 
+# 2) set the row names equal to the user names
+matrix_binary_wide <- as.matrix(r_binary_wide)
+rownames(matrix_binary_wide) <- vector_users
+head(matrix_binary_wide[, 1:6])
+
+# replace NA for zero
+matrix_binary_wide[is.na(matrix_binary_wide)] <- 0
+head(matrix_binary_wide[, 1:6])
+# 816711 2726560 3079380 1091191 2381249 1398426
+# 2       1       1       1       1       1       1
+# 18      0       0       0       1       0       0
+# 26      1       0       0       0       0       0
+# 38      0       0       0       0       0       0
+# 48      0       0       0       0       0       0
+# 49      0       0       1       0       0       0
+
+
+# coercing matrix_wide into a binary rating matrix 
+binary_matrix <- as(matrix_binary_wide, "binaryRatingMatrix")
+binary_matrix
+
+
+
+######## Prepare the data for rating systems #########
+rating_wide <- reshape(data = r_rating,
+                       direction = "wide",
+                       idvar = "user_id",
+                       timevar = "movie_id",
+                       drop = NULL)
+
+vector_users <- rating_wide[, user_id]
+r_wide <- rating_wide[ ,user_id := NULL]
+
+setnames(x = rating_wide,old = names(rating_wide),new = substring(names(rating_wide), 7))
+
+matrix_rating_wide <- as.matrix(rating_wide)
+rownames(matrix_rating_wide) <- vector_users
+head(matrix_rating_wide[, 1:6])
+
+ratings_matrix <- as(matrix_rating_wide, "realRatingMatrix")
+ratings_matrix
+
+# delete non necessary data
+rm(r,r_binary,r_binary_wide,r_wide,r_rating,rating_wide,r2,ratings,t_m,t_m_u,missing,dupli_m)
+
+```
+
+\hspace*{2cm}
+**2) Divide 70% to train and 30% test**
+
+In this step, the data set is divided in 70% for training and 30% for testing. Also, some parameters are defined: 
+•	In order to measure performance binary equal 1 (watched the movie) is considered good and for rating systems greater or equal than 8 is good
+•	It is considered the 30 nearest neighbors to calculate the similarity [1]
+It will be recommended 30 movies, starting from 1 to 30 by 5 
+
+
+```{r}
+# split the data into the training and the test set
+# Binary #
+which_binary_train <- sample(x = c(TRUE, FALSE), size = nrow(binary_matrix),
+                             replace = TRUE, prob = c(0.7, 0.3))
+recc_binary_train <- binary_matrix[which_binary_train, ]
+recc_binary_test <- binary_matrix[!which_binary_train, ]
+
+
+# Rating #
+which_rating_train <- sample(x = c(TRUE, FALSE), size = nrow(ratings_matrix),
+                             replace = TRUE, prob = c(0.7, 0.3))
+recc_rating_train <- ratings_matrix[which_rating_train, ]
+recc_rating_test <- ratings_matrix[!which_rating_train, ]
+
+
+# Defining some parameters
+percentage_training <- 0.7
+binary_threshold <- 1 # 1 is good
+rating_threshold <- 8 # over or equal 8 is good
+n_eval <- 1 # how many times we want to run the evaluation
+number_neighbors <- 30 # nearest neighbors
+n_recommendations <- c(1, 5, seq(10, 30, 5)) #number of recommendations
+n_recommended <- 6 # 6 movies
+```
+
+\hspace*{2cm}
+**3) Build arecommender system using binary variable**
+
+In this phase, is built a binary system on train data set using item-based collaborative filtering (IBCF) and Jaccard index. Also is extracted a data set with the first 6 recommendations per user.
+
+
+```{r}
+# Build a system using item-based and Jaccard index to measure the similarity
+recc_binary_model <- Recommender(data = recc_binary_train,
+                          method = "IBCF",
+                          parameter = list(method = "Jaccard"))
+
+# apply the recommender system on test set
+recc_binary_predicted <- predict(object = recc_binary_model, newdata = recc_binary_test, n = n_recommended)
+recc_binary_predicted
+# check configuration
+class(recc_binary_predicted)
+
+# these are the recommendations for the first user:
+recc_binary_predicted@items[[1]]
+
+# these are the recommendations for the second user
+recc_binary_predicted@items[[2]]
+
+# define a matrix with the recommendations for each user:
+recc_binary_matrix <- sapply(recc_binary_predicted@items, function(x){colnames(binary_matrix)[x]})
+recc_binary_users <- as.data.table(recc_binary_matrix)
+recc_binary_users_final <- t(recc_binary_users)
+colnames(recc_binary_users_final) <- c("rec1","rec2","rec3","rec4","rec5","rec6")
+head(recc_binary_users_final)
+
+
+```
+
+\hspace*{2cm}
+**4) Compare different approaches for binary systems measuring the accuracy using confusion matrix and ROC curve for BINARY systems**
+
+In this step, is compared the performance of the following binary systems using confusion matrix, ROC curve and precision/recall graphs:
+•	Item-based Collaborative Filtering using Euclidean distance
+•	Item-based Collaborative Filtering using cosine distance
+•	Item-based Collaborative Filtering using Pearson correlation
+•	Item-based Collaborative Filtering using Jaccard index
+•	User-based Collaborative Filtering using Jaccard index
+• User-based Collaborative Filtering using cosine distance
+
+
+```{r}
+items_to_keep <- 10  # filter: 10 movies/user
+
+# run evaluation on test data set
+eval_binary_sets <- evaluationScheme(data = binary_matrix, 
+                              method = "split",
+                              train = percentage_training, 
+                              given = items_to_keep, 
+                              goodRating =binary_threshold, 
+                              k = n_eval) 
+eval_binary_sets
+
+# list all the systems that will be compared
+models_binary_evaluate <- list(
+  IBCF_jac = list(name = "IBCF", param = list(method = "jaccard")),
+  IBCF_cos = list(name = "IBCF", param = list(method = "cosine")),
+  IBCF_cor = list(name = "IBCF", param = list(method = "pearson")),
+  IBCF_euc = list(name = "IBCF", param = list(method = "euclidean")),
+  
+  UBCF_jac = list(name = "UBCF", param = list(method = "jaccard")),
+  UBCF_cos = list(name = "UBCF", param = list(method = "cosine"))
+)
+
+list_binary_results <- evaluate(x = eval_binary_sets, 
+                         method = models_binary_evaluate,
+                         n = n_recommendations)
+
+# ROC curve
+plot(list_binary_results, legend = "topleft",ylim = c(0, 0.80)) 
+title("ROC curve - binary systems")
+
+# Precision/recall
+plot(list_binary_results, "prec/rec", legend = "bottomleft")
+title("Precision-recall - binary systems")
+
+# Confusion matrix
+avg_binary_matrices <- lapply(list_binary_results, avg)
+
+
+# Confusion matrix - IBCF cosine distance
+head(avg_binary_matrices$IBCF_cos[,1:8])
+
+# Confusion matrix - IBCF jaccard index
+head(avg_binary_matrices$IBCF_jac[,1:8])
+
+# Confusion matrix - IBCF euclidean distance
+head(avg_binary_matrices$IBCF_euc[,1:8])
+
+# Confusion matrix - IBCF pearson correlation
+head(avg_binary_matrices$IBCF_cor[,1:8])
+
+# Confusion matrix - UBCF cosine distance
+head(avg_binary_matrices$UBCF_cos[,1:8])
+
+# Confusion matrix - UBCF jaccard index
+head(avg_binary_matrices$UBCF_jac[,1:8])
+
+```
+
+\hspace*{2cm}
+**5) Build the recommender system using rating **
+
+In this phase, is built a rating system on train data set using item-based collaborative filtering (IBCF) and Jaccard index. Also is extracted a data set with the first 6 recommendations per user.
+
+
+
+```{r}
+# Build a system using item-based and Jaccard index to measure the similarity
+recc_rating_model <- Recommender(data = recc_rating_train,
+                                 method = "IBCF",
+                                 parameter = list(method = "Jaccard"))
+
+recc_rating_predicted <- predict(object = recc_rating_model, newdata = recc_rating_test, n = n_recommended)
+recc_rating_predicted
+class(recc_rating_predicted)
+
+# these are the recommendations for the first user:
+recc_rating_predicted@items[[1]]
+
+# second user
+recc_rating_predicted@items[[2]]
+
+# define a matrix with the recommendations for each user:
+recc_rating_matrix <- sapply(recc_rating_predicted@items, function(x){colnames(ratings_matrix)[x]})
+recc_rating_users <- as.data.table(recc_rating_matrix)
+recc_rating_users_final <- t(recc_rating_users)
+colnames(recc_rating_users_final) <- c("rec1","rec2","rec3","rec4","rec5","rec6")
+head(recc_rating_users_final)
+
+```
+
+\hspace*{2cm}
+**6) Compare different approaches for rating systems measuring the accuracy using confusion matrix and ROC curve for RATING systems **
+
+In this step, is compared the performance of the following binary systems using confusion matrix, ROC curve and precision/recall graphs:
+•	Item-based Collaborative Filtering using Euclidean distance
+•	Item-based Collaborative Filtering using cosine distance
+•	Item-based Collaborative Filtering using Pearson correlation
+•	Item-based Collaborative Filtering using Jaccard index
+•	User-based Collaborative Filtering using Jaccard index
+•	User-based Collaborative Filtering using cosine distance
+•	User-based Collaborative Filtering using Pearson correlation
+•	User-based Collaborative Filtering using Euclidean distance
+
+
+```{r}
+# run evaluation on test data set
+items_to_keep <- 90
+eval_rating_sets <- evaluationScheme(data = ratings_matrix, 
+                                     method = "split",
+                                     train = percentage_training, 
+                                     given = items_to_keep, 
+                                     goodRating =rating_threshold, 
+                                     k = n_eval) 
+eval_rating_sets
+
+models_rating_evaluate <- list(
+  IBCF_jac = list(name = "IBCF", param = list(method = "jaccard")),
+  IBCF_cos = list(name = "IBCF", param = list(method = "cosine")),
+  IBCF_cor = list(name = "IBCF", param = list(method = "pearson")),
+  IBCF_euc = list(name = "IBCF", param = list(method = "euclidean")),
+  
+  UBCF_jac = list(name = "UBCF", param = list(method = "jaccard")),
+  UBCF_cos = list(name = "UBCF", param = list(method = "cosine")),
+  UBCF_cor = list(name = "UBCF", param = list(method = "pearson")),
+  UBCF_euc = list(name = "UBCF", param = list(method = "euclidean"))
+  
+)
+
+list_rating_results <- evaluate(x = eval_rating_sets, 
+                                method = models_rating_evaluate,
+                                n = n_recommendations)
+
+plot(list_rating_results, legend = "topleft",ylim = c(0, 0.80)) 
+title("ROC curve - rating systems")
+
+plot(list_rating_results, "prec/rec", legend = "bottomleft")
+title("Precision-recall - rating systems")
+
+# Confusion matrix
+avg_rating_matrices <- lapply(list_rating_results, avg)
+
+
+# Confusion matrix - IBCF cosine distance
+head(avg_rating_matrices$IBCF_cos[,1:8])
+
+# Confusion matrix -  IBCF jaccard index
+head(avg_rating_matrices$IBCF_jac[,1:8])
+
+# Confusion matrix -  IBCF euclidean distance
+head(avg_rating_matrices$IBCF_euc[,1:8])
+
+# Confusion matrix -  IBCF pearson correlation
+head(avg_rating_matrices$IBCF_cor[,1:8])
+
+# Confusion matrix -  UBCF cosine distance
+head(avg_rating_matrices$UBCF_cos[,1:8])
+
+# Confusion matrix -  UBCF jaccard index
+head(avg_rating_matrices$UBCF_jac[,1:8])
+
+# Confusion matrix -  UBCF pearson correlation
+head(avg_rating_matrices$UBCF_cor[,1:8])
+
+# Confusion matrix -  UBCF euclidean distance
+head(avg_rating_matrices$UBCF_euc[,1:8])
+
+```
+
+\hspace*{2cm}
+**7) Conclusions:**
+        As we can see below, rating systems are more accurate then binary ones, and user-based are superior than item-based. Also, Jaccard index and cosine distance are a better approach to calculate the similarity.
+          
+```{r}
+
+library(rafalib)
+mypar(1,2)
+plot(list_binary_results, legend = "topleft",ylim = c(0, 0.80)) 
+title("ROC curve - binary systems")
+
+plot(list_rating_results, legend = "topleft",ylim = c(0, 0.80)) 
+title("ROC curve - rating systems")
+```
+
